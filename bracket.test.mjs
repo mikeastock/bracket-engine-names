@@ -11,6 +11,7 @@ import {
   selectWinner,
   serializeState,
 } from "./bracket.mjs";
+import { DEFAULT_NAMES_TEXT } from "./default-names.mjs";
 
 test("parseNames trims lines and removes blanks", () => {
   assert.deepEqual(parseNames("  Ada  \n\nGrace\n  Linus "), {
@@ -80,4 +81,15 @@ test("serializeState and deserializeState round-trip valid state", () => {
 test("deserializeState rejects invalid payloads", () => {
   assert.equal(deserializeState('{"bad":true}'), null);
   assert.equal(deserializeState("not-json"), null);
+});
+
+test("default names produce a valid 64-name opening bracket", () => {
+  const { names } = parseNames(DEFAULT_NAMES_TEXT);
+  const result = createInitialState(names);
+
+  assert.equal(names.length, 64);
+  assert.equal(result.error, null);
+  assert.equal(result.state.rounds.length, 6);
+  assert.deepEqual(result.state.rounds[0][0].slots, ["Torque", "Spotter"]);
+  assert.deepEqual(result.state.rounds[0].at(-1).slots, ["Volt", "Flux"]);
 });

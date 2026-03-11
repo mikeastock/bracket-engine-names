@@ -8,13 +8,14 @@ import {
   selectWinner,
   serializeState,
 } from "./bracket.mjs";
+import { DEFAULT_NAMES_TEXT } from "./default-names.mjs";
 
 const STORAGE_KEY = "name-bracket-state";
 const h = React.createElement;
 
 function App() {
   const [state, setState] = useState(loadSavedState);
-  const [rawNames, setRawNames] = useState("");
+  const [rawNames, setRawNames] = useState(DEFAULT_NAMES_TEXT);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -47,7 +48,7 @@ function App() {
 
   function handleReset() {
     setState(null);
-    setRawNames("");
+    setRawNames(DEFAULT_NAMES_TEXT);
     setError("");
   }
 
