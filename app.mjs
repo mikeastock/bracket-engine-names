@@ -28,6 +28,7 @@ const h = React.createElement;
 function App() {
   const [state, setState] = useState(loadSavedState);
   const [rawNames, setRawNames] = useState(DEFAULT_NAMES_TEXT);
+  const [buildMode, setBuildMode] = useState("seeded");
   const [error, setError] = useState("");
   const [theme, setTheme] = useState(loadTheme);
 
@@ -52,7 +53,7 @@ function App() {
     event.preventDefault();
 
     const parsed = parseNames(rawNames);
-    const result = createInitialState(parsed.names);
+    const result = createInitialState(parsed.names, { mode: buildMode });
 
     if (result.error) {
       setError(result.error);
@@ -70,6 +71,7 @@ function App() {
   function handleReset() {
     setState(null);
     setRawNames(DEFAULT_NAMES_TEXT);
+    setBuildMode("seeded");
     setError("");
   }
 
@@ -108,9 +110,11 @@ function App() {
           onSelectWinner: handleWinner,
         })
       : h(ImportForm, {
+          buildMode,
           error,
           rawNames,
           theme,
+          onBuildModeChange: setBuildMode,
           onChange: setRawNames,
           onSubmit: handleImport,
         }),
@@ -175,7 +179,7 @@ function Header({ hasBracket, onReset, onToggleTheme, theme }) {
   );
 }
 
-function ImportForm({ error, rawNames, theme, onChange, onSubmit }) {
+function ImportForm({ buildMode, error, rawNames, theme, onBuildModeChange, onChange, onSubmit }) {
   return h(
     "section",
     {
@@ -201,6 +205,53 @@ function ImportForm({ error, rawNames, theme, onChange, onSubmit }) {
           value: rawNames,
           onChange: (event) => onChange(event.target.value),
         }),
+      ),
+      h(
+        "fieldset",
+        { className: "space-y-3" },
+        h("legend", { className: `text-sm font-semibold ${theme === "dark" ? "text-stone-200" : "text-stone-700"}` }, "Mode"),
+        h(
+          "div",
+          { className: "grid gap-3 sm:grid-cols-2" },
+          ...[
+            {
+              value: "seeded",
+              title: "Original order",
+              description: "Build the opening round from the names exactly as entered.",
+            },
+            {
+              value: "randomize",
+              title: "Randomize",
+              description: "Shuffle the names once, then build the bracket from that order.",
+            },
+          ].map((modeOption) =>
+            h(
+              "label",
+              {
+                key: modeOption.value,
+                className: `cursor-pointer rounded-[1.5rem] border p-4 transition ${
+                  buildMode === modeOption.value
+                    ? theme === "dark"
+                      ? "border-amber-500 bg-amber-950/40"
+                      : "border-amber-600 bg-amber-100"
+                    : theme === "dark"
+                      ? "border-stone-700 bg-stone-950"
+                      : "border-stone-300 bg-stone-50"
+                }`,
+              },
+              h("input", {
+                type: "radio",
+                name: "build-mode",
+                value: modeOption.value,
+                checked: buildMode === modeOption.value,
+                className: "sr-only",
+                onChange: (event) => onBuildModeChange(event.target.value),
+              }),
+              h("p", { className: `text-sm font-semibold ${theme === "dark" ? "text-stone-100" : "text-stone-900"}` }, modeOption.title),
+              h("p", { className: `mt-1 text-sm leading-6 ${theme === "dark" ? "text-stone-400" : "text-stone-600"}` }, modeOption.description),
+            ),
+          ),
+        ),
       ),
       error
         ? h(

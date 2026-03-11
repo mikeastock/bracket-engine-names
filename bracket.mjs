@@ -39,7 +39,7 @@ export function buildInitialBracket(names) {
   return rounds;
 }
 
-export function createInitialState(names) {
+export function createInitialState(names, options = {}) {
   if (!isPowerOfTwo(names.length)) {
     return {
       state: null,
@@ -47,11 +47,13 @@ export function createInitialState(names) {
     };
   }
 
+  const preparedNames = normalizeNamesForMode(names, options);
+
   return {
     state: {
       version: STORAGE_VERSION,
-      names,
-      rounds: buildInitialBracket(names),
+      names: preparedNames,
+      rounds: buildInitialBracket(preparedNames),
       champion: null,
     },
     error: null,
@@ -154,6 +156,25 @@ function isValidState(value) {
           ("winner" in matchup),
       ),
   );
+}
+
+function normalizeNamesForMode(names, options) {
+  if (options.mode === "randomize") {
+    return shuffleNames(names, options.random ?? Math.random);
+  }
+
+  return [...names];
+}
+
+function shuffleNames(names, random) {
+  const shuffled = [...names];
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+
+  return shuffled;
 }
 
 function propagateForward(rounds, roundIndex, matchupIndex) {

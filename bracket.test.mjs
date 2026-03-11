@@ -33,6 +33,29 @@ test("createInitialState returns a validation error for non power-of-two lists",
   assert.equal(createInitialState(["Ada", "Grace", "Linus"]).error, "Enter 2, 4, 8, 16, or another power-of-two number of names.");
 });
 
+test("createInitialState randomize mode shuffles names before building the bracket", () => {
+  const randomValues = [0.75, 0.5, 0.25];
+  const nextRandom = () => randomValues.shift() ?? 0;
+  const names = ["Ada", "Grace", "Linus", "Margaret"];
+
+  const result = createInitialState(names, { mode: "randomize", random: nextRandom });
+
+  assert.equal(result.error, null);
+  assert.deepEqual(result.state.names, ["Linus", "Ada", "Grace", "Margaret"]);
+  assert.deepEqual(result.state.rounds[0], [
+    { slots: ["Linus", "Ada"], winner: null },
+    { slots: ["Grace", "Margaret"], winner: null },
+  ]);
+});
+
+test("createInitialState randomize mode does not mutate the input names", () => {
+  const names = ["Ada", "Grace", "Linus", "Margaret"];
+
+  createInitialState(names, { mode: "randomize", random: () => 0 });
+
+  assert.deepEqual(names, ["Ada", "Grace", "Linus", "Margaret"]);
+});
+
 test("buildInitialBracket creates first round matchups from seed order", () => {
   const rounds = buildInitialBracket(["Ada", "Grace", "Linus", "Margaret"]);
 
