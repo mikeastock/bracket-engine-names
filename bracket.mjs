@@ -87,6 +87,28 @@ export function serializeState(state) {
   return JSON.stringify(state);
 }
 
+export function buildExportPayload(state, exportedAt = new Date().toISOString()) {
+  if (!state?.champion) {
+    return null;
+  }
+
+  return {
+    exportedAt,
+    champion: state.champion,
+    names: state.names,
+    rounds: state.rounds,
+  };
+}
+
+export function exportFileName(champion) {
+  const slug = champion
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return `name-bracket-${slug || "results"}.json`;
+}
+
 export function deserializeState(raw) {
   if (!raw) {
     return null;

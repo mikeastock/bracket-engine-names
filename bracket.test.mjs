@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 
 import {
   advanceWinner,
+  buildExportPayload,
   buildInitialBracket,
   createInitialState,
   deserializeState,
+  exportFileName,
   isPowerOfTwo,
   parseNames,
   selectWinner,
@@ -92,4 +94,31 @@ test("default names produce a valid 64-name opening bracket", () => {
   assert.equal(result.state.rounds.length, 6);
   assert.deepEqual(result.state.rounds[0][0].slots, ["Torque", "Spotter"]);
   assert.deepEqual(result.state.rounds[0].at(-1).slots, ["Volt", "Flux"]);
+});
+
+test("buildExportPayload returns completed bracket results", () => {
+  let state = createInitialState(["Ada", "Grace", "Linus", "Margaret"]).state;
+  state = selectWinner(state, 0, 0, "Ada");
+  state = selectWinner(state, 0, 1, "Margaret");
+  state = selectWinner(state, 1, 0, "Ada");
+
+  const payload = buildExportPayload(state, "2026-03-11T12:00:00.000Z");
+
+  assert.deepEqual(payload, {
+    exportedAt: "2026-03-11T12:00:00.000Z",
+    champion: "Ada",
+    names: ["Ada", "Grace", "Linus", "Margaret"],
+    rounds: state.rounds,
+  });
+});
+
+test("buildExportPayload rejects incomplete brackets", () => {
+  const state = createInitialState(["Ada", "Grace", "Linus", "Margaret"]).state;
+
+  assert.equal(buildExportPayload(state, "2026-03-11T12:00:00.000Z"), null);
+});
+
+test("exportFileName slugifies the champion name", () => {
+  assert.equal(exportFileName("Ada Lovelace"), "name-bracket-ada-lovelace.json");
+  assert.equal(exportFileName("DRS"), "name-bracket-drs.json");
 });

@@ -2,8 +2,10 @@ import React, { useEffect, useState } from "https://esm.sh/react@19.0.0";
 import { createRoot } from "https://esm.sh/react-dom@19.0.0/client";
 
 import {
+  buildExportPayload,
   createInitialState,
   deserializeState,
+  exportFileName,
   parseNames,
   selectWinner,
   serializeState,
@@ -52,12 +54,28 @@ function App() {
     setError("");
   }
 
+  function handleExport() {
+    const payload = buildExportPayload(state);
+    if (!payload) {
+      return;
+    }
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = exportFileName(payload.champion);
+    link.click();
+    window.URL.revokeObjectURL(url);
+  }
+
   return h(
     "main",
     { className: "mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-8 sm:px-6 lg:px-8" },
     h(Header, { hasBracket: Boolean(state), onReset: handleReset }),
     state
       ? h(BracketView, {
+          onExport: handleExport,
           state,
           onSelectWinner: handleWinner,
         })
@@ -142,7 +160,7 @@ function ImportForm({ error, rawNames, onChange, onSubmit }) {
   );
 }
 
-function BracketView({ state, onSelectWinner }) {
+function BracketView({ onExport, state, onSelectWinner }) {
   return h(
     "section",
     { className: "space-y-6" },
@@ -150,8 +168,26 @@ function BracketView({ state, onSelectWinner }) {
       ? h(
           "div",
           { className: "rounded-[2rem] bg-stone-900 px-6 py-5 text-amber-50 shadow-[0_24px_80px_-32px_rgba(28,25,23,0.75)]" },
-          h("p", { className: "text-sm font-semibold uppercase tracking-[0.3em] text-amber-300" }, "Chosen Name"),
-          h("p", { className: "mt-2 text-3xl font-black tracking-tight sm:text-4xl" }, state.champion),
+          h(
+            "div",
+            { className: "flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between" },
+            h(
+              "div",
+              null,
+              h("p", { className: "text-sm font-semibold uppercase tracking-[0.3em] text-amber-300" }, "Chosen Name"),
+              h("p", { className: "mt-2 text-3xl font-black tracking-tight sm:text-4xl" }, state.champion),
+            ),
+            h(
+              "button",
+              {
+                type: "button",
+                className:
+                  "inline-flex items-center justify-center rounded-full bg-amber-400 px-5 py-3 text-sm font-semibold text-stone-950 transition hover:bg-amber-300",
+                onClick: onExport,
+              },
+              "Save results",
+            ),
+          ),
         )
       : h(
           "div",
