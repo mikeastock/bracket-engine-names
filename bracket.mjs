@@ -1,4 +1,4 @@
-const STORAGE_VERSION = 1;
+const STORAGE_VERSION = 2;
 
 export function parseNames(rawText) {
   const names = rawText
@@ -19,7 +19,7 @@ export function buildInitialBracket(names) {
 
   for (let index = 0; index < names.length; index += 2) {
     currentRound.push({
-      slots: [names[index], names[index + 1]],
+      slots: [names[index].id, names[index + 1].id],
       winner: null,
     });
   }
@@ -48,12 +48,16 @@ export function createInitialState(names, options = {}) {
   }
 
   const preparedNames = normalizeNamesForMode(names, options);
+  const entries = preparedNames.map((label, index) => ({
+    id: `entry-${index + 1}`,
+    label,
+  }));
 
   return {
     state: {
       version: STORAGE_VERSION,
-      names: preparedNames,
-      rounds: buildInitialBracket(preparedNames),
+      entries,
+      rounds: buildInitialBracket(entries),
       champion: null,
     },
     error: null,
@@ -85,6 +89,21 @@ export function selectWinner(state, roundIndex, matchupIndex, winnerName) {
   };
 }
 
+export function renameEntry(state, entryId, nextLabel) {
+  const trimmedLabel = nextLabel.trim();
+
+  if (!trimmedLabel) {
+    return state;
+  }
+
+  return {
+    ...state,
+    entries: state.entries.map((entry) =>
+      entry.id === entryId ? { ...entry, label: trimmedLabel } : entry,
+    ),
+  };
+}
+
 export function serializeState(state) {
   return JSON.stringify(state);
 }
@@ -94,11 +113,18 @@ export function buildExportPayload(state, exportedAt = new Date().toISOString())
     return null;
   }
 
+  const labelsById = new Map(state.entries.map((entry) => [entry.id, entry.label]));
+
   return {
     exportedAt,
-    champion: state.champion,
-    names: state.names,
-    rounds: state.rounds,
+    champion: labelsById.get(state.champion) ?? state.champion,
+    names: state.entries.map((entry) => entry.label),
+    rounds: state.rounds.map((round) =>
+      round.map((matchup) => ({
+        slots: matchup.slots.map((slot) => (slot ? (labelsById.get(slot) ?? slot) : null)),
+        winner: matchup.winner ? (labelsById.get(matchup.winner) ?? matchup.winner) : null,
+      })),
+    ),
   };
 }
 
@@ -137,11 +163,30 @@ function isValidState(value) {
     return false;
   }
 
-  if (!Array.isArray(value.names) || !isPowerOfTwo(value.names.length)) {
+  if (!Array.isArray(value.entries) || !isPowerOfTwo(value.entries.length)) {
+    return false;
+  }
+
+  if (
+    !value.entries.every(
+      (entry) =>
+        entry &&
+        typeof entry.id === "string" &&
+        entry.id &&
+        typeof entry.label === "string" &&
+        entry.label.trim(),
+    )
+  ) {
     return false;
   }
 
   if (!Array.isArray(value.rounds) || value.rounds.length === 0) {
+    return false;
+  }
+
+  const entryIds = new Set(value.entries.map((entry) => entry.id));
+
+  if (value.champion !== null && !entryIds.has(value.champion)) {
     return false;
   }
 
@@ -153,7 +198,8 @@ function isValidState(value) {
           matchup &&
           Array.isArray(matchup.slots) &&
           matchup.slots.length === 2 &&
-          ("winner" in matchup),
+          matchup.slots.every((slot) => slot === null || entryIds.has(slot)) &&
+          (matchup.winner === null || entryIds.has(matchup.winner)),
       ),
   );
 }

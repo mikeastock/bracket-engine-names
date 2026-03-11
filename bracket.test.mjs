@@ -10,6 +10,7 @@ import {
   exportFileName,
   isPowerOfTwo,
   parseNames,
+  renameEntry,
   selectWinner,
   serializeState,
 } from "./bracket.mjs";
@@ -41,10 +42,13 @@ test("createInitialState randomize mode shuffles names before building the brack
   const result = createInitialState(names, { mode: "randomize", random: nextRandom });
 
   assert.equal(result.error, null);
-  assert.deepEqual(result.state.names, ["Linus", "Ada", "Grace", "Margaret"]);
+  assert.deepEqual(
+    result.state.entries.map((entry) => entry.label),
+    ["Linus", "Ada", "Grace", "Margaret"],
+  );
   assert.deepEqual(result.state.rounds[0], [
-    { slots: ["Linus", "Ada"], winner: null },
-    { slots: ["Grace", "Margaret"], winner: null },
+    { slots: ["entry-1", "entry-2"], winner: null },
+    { slots: ["entry-3", "entry-4"], winner: null },
   ]);
 });
 
@@ -57,29 +61,42 @@ test("createInitialState randomize mode does not mutate the input names", () => 
 });
 
 test("buildInitialBracket creates first round matchups from seed order", () => {
-  const rounds = buildInitialBracket(["Ada", "Grace", "Linus", "Margaret"]);
+  const rounds = buildInitialBracket([
+    { id: "entry-1", label: "Ada" },
+    { id: "entry-2", label: "Grace" },
+    { id: "entry-3", label: "Linus" },
+    { id: "entry-4", label: "Margaret" },
+  ]);
 
   assert.equal(rounds.length, 2);
   assert.deepEqual(rounds[0], [
-    { slots: ["Ada", "Grace"], winner: null },
-    { slots: ["Linus", "Margaret"], winner: null },
+    { slots: ["entry-1", "entry-2"], winner: null },
+    { slots: ["entry-3", "entry-4"], winner: null },
   ]);
   assert.deepEqual(rounds[1], [{ slots: [null, null], winner: null }]);
 });
 
 test("advanceWinner writes the selected winner into the next round", () => {
-  const rounds = buildInitialBracket(["Ada", "Grace", "Linus", "Margaret"]);
-  const advanced = advanceWinner(rounds, 0, 1, "Margaret");
+  const rounds = buildInitialBracket([
+    { id: "entry-1", label: "Ada" },
+    { id: "entry-2", label: "Grace" },
+    { id: "entry-3", label: "Linus" },
+    { id: "entry-4", label: "Margaret" },
+  ]);
+  const advanced = advanceWinner(rounds, 0, 1, "entry-4");
 
-  assert.equal(advanced[0][1].winner, "Margaret");
-  assert.deepEqual(advanced[1][0].slots, [null, "Margaret"]);
+  assert.equal(advanced[0][1].winner, "entry-4");
+  assert.deepEqual(advanced[1][0].slots, [null, "entry-4"]);
 });
 
 test("advanceWinner updates the champion after the final pick", () => {
-  let rounds = buildInitialBracket(["Ada", "Grace"]);
-  rounds = advanceWinner(rounds, 0, 0, "Ada");
+  let rounds = buildInitialBracket([
+    { id: "entry-1", label: "Ada" },
+    { id: "entry-2", label: "Grace" },
+  ]);
+  rounds = advanceWinner(rounds, 0, 0, "entry-1");
 
-  assert.equal(rounds[0][0].winner, "Ada");
+  assert.equal(rounds[0][0].winner, "entry-1");
 });
 
 test("selectWinner clears downstream picks when an earlier result changes", () => {
@@ -94,6 +111,32 @@ test("selectWinner clears downstream picks when an earlier result changes", () =
   assert.deepEqual(state.rounds[1][0].slots, ["Grace", "Margaret"]);
   assert.equal(state.rounds[1][0].winner, null);
   assert.equal(state.champion, null);
+});
+
+test("renameEntry updates every visible occurrence of the edited entrant", () => {
+  let state = createInitialState(["Ada", "Grace", "Linus", "Margaret"]).state;
+  const adaId = state.entries[0].id;
+  const margaretId = state.entries[3].id;
+  state = selectWinner(state, 0, 0, adaId);
+  state = selectWinner(state, 0, 1, margaretId);
+  state = selectWinner(state, 1, 0, adaId);
+
+  state = renameEntry(state, adaId, "Ada Lovelace");
+
+  assert.equal(state.entries[0].label, "Ada Lovelace");
+  assert.equal(state.champion, adaId);
+  assert.deepEqual(buildExportPayload(state, "2026-03-11T12:00:00.000Z"), {
+    exportedAt: "2026-03-11T12:00:00.000Z",
+    champion: "Ada Lovelace",
+    names: ["Ada Lovelace", "Grace", "Linus", "Margaret"],
+    rounds: [
+      [
+        { slots: ["Ada Lovelace", "Grace"], winner: "Ada Lovelace" },
+        { slots: ["Linus", "Margaret"], winner: "Margaret" },
+      ],
+      [{ slots: ["Ada Lovelace", "Margaret"], winner: "Ada Lovelace" }],
+    ],
+  });
 });
 
 test("serializeState and deserializeState round-trip valid state", () => {
@@ -115,8 +158,8 @@ test("default names produce a valid 64-name opening bracket", () => {
   assert.equal(names.length, 64);
   assert.equal(result.error, null);
   assert.equal(result.state.rounds.length, 6);
-  assert.deepEqual(result.state.rounds[0][0].slots, ["Torque", "Spotter"]);
-  assert.deepEqual(result.state.rounds[0].at(-1).slots, ["Volt", "Flux"]);
+  assert.deepEqual(result.state.rounds[0][0].slots, ["entry-1", "entry-2"]);
+  assert.deepEqual(result.state.rounds[0].at(-1).slots, ["entry-63", "entry-64"]);
 });
 
 test("buildExportPayload returns completed bracket results", () => {
@@ -131,7 +174,13 @@ test("buildExportPayload returns completed bracket results", () => {
     exportedAt: "2026-03-11T12:00:00.000Z",
     champion: "Ada",
     names: ["Ada", "Grace", "Linus", "Margaret"],
-    rounds: state.rounds,
+    rounds: [
+      [
+        { slots: ["Ada", "Grace"], winner: "Ada" },
+        { slots: ["Linus", "Margaret"], winner: "Margaret" },
+      ],
+      [{ slots: ["Ada", "Margaret"], winner: "Ada" }],
+    ],
   });
 });
 

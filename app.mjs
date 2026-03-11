@@ -8,6 +8,7 @@ import {
   deserializeState,
   exportFileName,
   parseNames,
+  renameEntry,
   selectWinner,
   serializeState,
 } from "./bracket.mjs";
@@ -16,7 +17,7 @@ import { DEFAULT_NAMES_TEXT } from "./default-names.mjs";
 const STORAGE_KEY = "name-bracket-state";
 const THEME_STORAGE_KEY = "name-bracket-theme";
 const BRACKET_LAYOUT = {
-  cardHeight: 88,
+  cardHeight: 120,
   rowGap: 18,
   columnWidth: 224,
   columnGap: 56,
@@ -68,6 +69,10 @@ function App() {
     setState((currentState) => selectWinner(currentState, roundIndex, matchupIndex, winnerName));
   }
 
+  function handleRenameEntry(entryId, nextLabel) {
+    setState((currentState) => renameEntry(currentState, entryId, nextLabel));
+  }
+
   function handleReset() {
     setState(null);
     setRawNames(DEFAULT_NAMES_TEXT);
@@ -105,6 +110,7 @@ function App() {
     state
       ? h(BracketView, {
           onExport: handleExport,
+          onRenameEntry: handleRenameEntry,
           state,
           theme,
           onSelectWinner: handleWinner,
@@ -273,8 +279,10 @@ function ImportForm({ buildMode, error, rawNames, theme, onBuildModeChange, onCh
   );
 }
 
-function BracketView({ onExport, state, theme, onSelectWinner }) {
+function BracketView({ onExport, onRenameEntry, state, theme, onSelectWinner }) {
   const layout = buildBracketLayout(state.rounds, BRACKET_LAYOUT);
+  const namesById = new Map(state.entries.map((entry) => [entry.id, entry.label]));
+  const championName = state.champion ? namesById.get(state.champion) ?? state.champion : null;
 
   return h(
     "section",
@@ -290,7 +298,7 @@ function BracketView({ onExport, state, theme, onSelectWinner }) {
               "div",
               null,
               h("p", { className: "text-sm font-semibold uppercase tracking-[0.3em] text-amber-300" }, "Chosen Name"),
-              h("p", { className: "mt-2 text-3xl font-black tracking-tight sm:text-4xl" }, state.champion),
+              h("p", { className: "mt-2 text-3xl font-black tracking-tight sm:text-4xl" }, championName),
             ),
             h(
               "button",
@@ -312,7 +320,7 @@ function BracketView({ onExport, state, theme, onSelectWinner }) {
             }`,
           },
           h("p", { className: "text-sm font-semibold uppercase tracking-[0.3em] text-amber-800" }, "In Progress"),
-          h("p", { className: `mt-2 text-lg font-semibold ${theme === "dark" ? "text-amber-200" : "text-amber-950"}` }, "Click a name in any matchup to advance it."),
+          h("p", { className: `mt-2 text-lg font-semibold ${theme === "dark" ? "text-amber-200" : "text-amber-950"}` }, "Edit any name inline or click Choose to advance it."),
         ),
     h(
       "div",
@@ -357,7 +365,9 @@ function BracketView({ onExport, state, theme, onSelectWinner }) {
                 connector ? h(ConnectorSet, { connector, key: `connector-${roundIndex}-${matchupIndex}`, theme }) : null,
                 h(MatchupCard, {
                   key: `matchup-${roundIndex}-${matchupIndex}`,
+                  namesById,
                   matchup,
+                  onRenameEntry,
                   onSelect: (winnerName) => onSelectWinner(roundIndex, matchupIndex, winnerName),
                   theme,
                   style: {
@@ -407,7 +417,7 @@ function ConnectorSet({ connector, theme }) {
   );
 }
 
-function MatchupCard({ matchup, onSelect, style, theme }) {
+function MatchupCard({ namesById, matchup, onRenameEntry, onSelect, style, theme }) {
   return h(
     "article",
     {
@@ -416,18 +426,62 @@ function MatchupCard({ matchup, onSelect, style, theme }) {
       }`,
       style,
     },
-    ...matchup.slots.map((name, slotIndex) =>
-      h(
-        "button",
-        {
-          key: `${name ?? "empty"}-${slotIndex}`,
-          type: "button",
-          disabled: !name,
-          className: buttonClassName(matchup.winner === name, !name, theme),
-          onClick: () => name && onSelect(name),
-        },
-        name ?? "Waiting for winner",
-      ),
+    ...matchup.slots.map((entryId, slotIndex) =>
+      entryId
+        ? h(EditableSlot, {
+            key: `${entryId}-${slotIndex}`,
+            entryId,
+            isWinner: matchup.winner === entryId,
+            name: namesById.get(entryId) ?? entryId,
+            onRenameEntry,
+            onSelect,
+            theme,
+          })
+        : h(
+            "div",
+            {
+              key: `empty-${slotIndex}`,
+              className: buttonClassName(false, true, theme),
+            },
+            "Waiting for winner",
+          ),
+    ),
+  );
+}
+
+function EditableSlot({ entryId, isWinner, name, onRenameEntry, onSelect, theme }) {
+  return h(
+    "div",
+    {
+      className: `flex items-center gap-2 rounded-[1rem] px-2 py-2 transition ${
+        isWinner
+          ? "bg-amber-500 text-stone-950 shadow-[inset_0_0_0_1px_rgba(120,53,15,0.2)]"
+          : theme === "dark"
+            ? "bg-stone-800 text-stone-100 shadow-[inset_0_0_0_1px_rgba(68,64,60,1)]"
+            : "bg-white text-stone-800 shadow-[inset_0_0_0_1px_rgba(214,211,209,1)]"
+      }`,
+    },
+    h("input", {
+      type: "text",
+      value: name,
+      "aria-label": `Edit ${name}`,
+      className: `min-w-0 flex-1 bg-transparent px-2 py-1 text-sm font-semibold outline-none ${
+        isWinner
+          ? "placeholder:text-stone-700"
+          : theme === "dark"
+            ? "placeholder:text-stone-500"
+            : "placeholder:text-stone-400"
+      }`,
+      onChange: (event) => onRenameEntry(entryId, event.target.value),
+    }),
+    h(
+      "button",
+      {
+        type: "button",
+        className: chooseButtonClassName(isWinner, theme),
+        onClick: () => onSelect(entryId),
+      },
+      isWinner ? "Chosen" : "Choose",
     ),
   );
 }
@@ -457,6 +511,16 @@ function buttonClassName(isWinner, isEmpty, theme = "light") {
       : "bg-white text-stone-800 shadow-[inset_0_0_0_1px_rgba(214,211,209,1)] hover:bg-stone-900 hover:text-amber-50",
   );
   return classes.join(" ");
+}
+
+function chooseButtonClassName(isWinner, theme = "light") {
+  if (isWinner) {
+    return "rounded-full bg-stone-950 px-3 py-2 text-xs font-semibold text-amber-50 transition hover:bg-stone-900";
+  }
+
+  return theme === "dark"
+    ? "rounded-full bg-amber-400 px-3 py-2 text-xs font-semibold text-stone-950 transition hover:bg-amber-300"
+    : "rounded-full bg-stone-900 px-3 py-2 text-xs font-semibold text-amber-50 transition hover:bg-amber-700";
 }
 
 function roundLabel(roundCount, roundIndex) {
