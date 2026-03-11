@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "https://esm.sh/react@19.0.0";
 import { createRoot } from "https://esm.sh/react-dom@19.0.0/client";
+import { buildBracketLayout, buildConnector } from "./bracket-layout.mjs";
 
 import {
   buildExportPayload,
@@ -13,6 +14,14 @@ import {
 import { DEFAULT_NAMES_TEXT } from "./default-names.mjs";
 
 const STORAGE_KEY = "name-bracket-state";
+const BRACKET_LAYOUT = {
+  cardHeight: 88,
+  rowGap: 18,
+  columnWidth: 224,
+  columnGap: 56,
+  topPadding: 60,
+  bottomPadding: 40,
+};
 const h = React.createElement;
 
 function App() {
@@ -161,6 +170,8 @@ function ImportForm({ error, rawNames, onChange, onSubmit }) {
 }
 
 function BracketView({ onExport, state, onSelectWinner }) {
+  const layout = buildBracketLayout(state.rounds, BRACKET_LAYOUT);
+
   return h(
     "section",
     { className: "space-y-6" },
@@ -200,27 +211,51 @@ function BracketView({ onExport, state, onSelectWinner }) {
       { className: "overflow-x-auto pb-4" },
       h(
         "div",
-        { className: "flex min-w-max gap-4 sm:gap-6" },
+        {
+          className: "relative min-w-max rounded-[2rem] border border-stone-300 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(250,245,235,0.9))] p-6 shadow-[0_24px_80px_-40px_rgba(41,37,36,0.45)]",
+          style: { width: `${layout.width + 48}px` },
+        },
         ...state.rounds.map((round, roundIndex) =>
           h(
-            "section",
+            "div",
             {
-              key: `round-${roundIndex}`,
-              className: "flex w-72 shrink-0 flex-col gap-4 rounded-[2rem] border border-stone-300 bg-white p-4 shadow-[0_16px_50px_-30px_rgba(41,37,36,0.45)]",
+              key: `label-${roundIndex}`,
+              className: "absolute",
+              style: {
+                left: `${24 + roundIndex * (layout.columnWidth + layout.columnGap)}px`,
+                top: "0px",
+                width: `${layout.columnWidth}px`,
+              },
             },
-            h(
-              "div",
-              { className: "border-b border-stone-200 pb-3" },
-              h("p", { className: "text-xs font-semibold uppercase tracking-[0.3em] text-stone-500" }, roundLabel(state.rounds.length, roundIndex)),
-              h("p", { className: "mt-1 text-sm text-stone-600" }, `${round.length} matchup${round.length === 1 ? "" : "s"}`),
-            ),
-            ...round.map((matchup, matchupIndex) =>
-              h(MatchupCard, {
-                key: `matchup-${roundIndex}-${matchupIndex}`,
-                matchup,
-                onSelect: (winnerName) => onSelectWinner(roundIndex, matchupIndex, winnerName),
-              }),
-            ),
+            h("p", { className: "text-xs font-semibold uppercase tracking-[0.3em] text-stone-500" }, roundLabel(state.rounds.length, roundIndex)),
+            h("p", { className: "mt-1 text-sm text-stone-600" }, `${round.length} matchup${round.length === 1 ? "" : "s"}`),
+          ),
+        ),
+        h(
+          "div",
+          {
+            className: "relative mt-14",
+            style: { height: `${layout.height}px`, width: `${layout.width}px` },
+          },
+          ...state.rounds.flatMap((round, roundIndex) =>
+            round.flatMap((matchup, matchupIndex) => {
+              const connector = buildConnector(layout, roundIndex, matchupIndex);
+
+              return [
+                connector ? h(ConnectorSet, { connector, key: `connector-${roundIndex}-${matchupIndex}` }) : null,
+                h(MatchupCard, {
+                  key: `matchup-${roundIndex}-${matchupIndex}`,
+                  matchup,
+                  onSelect: (winnerName) => onSelectWinner(roundIndex, matchupIndex, winnerName),
+                  style: {
+                    height: `${layout.cardHeight}px`,
+                    left: `${roundIndex * (layout.columnWidth + layout.columnGap)}px`,
+                    top: `${layout.rounds[roundIndex][matchupIndex].top}px`,
+                    width: `${layout.columnWidth}px`,
+                  },
+                }),
+              ];
+            }),
           ),
         ),
       ),
@@ -228,10 +263,45 @@ function BracketView({ onExport, state, onSelectWinner }) {
   );
 }
 
-function MatchupCard({ matchup, onSelect }) {
+function ConnectorSet({ connector }) {
+  return h(
+    React.Fragment,
+    null,
+    h("div", {
+      className: "absolute h-px bg-stone-300",
+      style: {
+        left: `${connector.horizontalStart.left}px`,
+        top: `${connector.horizontalStart.top}px`,
+        width: `${connector.horizontalStart.width}px`,
+      },
+    }),
+    h("div", {
+      className: "absolute w-px bg-stone-300",
+      style: {
+        left: `${connector.vertical.left}px`,
+        top: `${connector.vertical.top}px`,
+        height: `${connector.vertical.height}px`,
+      },
+    }),
+    h("div", {
+      className: "absolute h-px bg-stone-300",
+      style: {
+        left: `${connector.horizontalEnd.left}px`,
+        top: `${connector.horizontalEnd.top}px`,
+        width: `${connector.horizontalEnd.width}px`,
+      },
+    }),
+  );
+}
+
+function MatchupCard({ matchup, onSelect, style }) {
   return h(
     "article",
-    { className: "space-y-3 rounded-[1.5rem] bg-stone-50 p-3" },
+    {
+      className:
+        "absolute flex flex-col justify-between rounded-[1.4rem] border border-stone-300 bg-white/95 p-3 shadow-[0_12px_30px_-24px_rgba(41,37,36,0.5)]",
+      style,
+    },
     ...matchup.slots.map((name, slotIndex) =>
       h(
         "button",
@@ -250,7 +320,7 @@ function MatchupCard({ matchup, onSelect }) {
 
 function buttonClassName(isWinner, isEmpty) {
   const classes = [
-    "w-full rounded-[1.25rem] px-4 py-3 text-left text-sm font-semibold transition",
+    "flex-1 rounded-[1rem] px-4 py-3 text-left text-sm font-semibold transition",
   ];
 
   if (isEmpty) {
